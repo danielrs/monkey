@@ -6,50 +6,78 @@ type Lexer struct {
 	input        string
 	position     int
 	readPosition int
-	ch           byte
+	ch           token.Character
 }
 
+// Returns a pointer to a new Lexer.
 func New(input string) *Lexer {
 	l := &Lexer{input: input}
 	l.readChar()
 	return l
 }
 
+// Gets the next token in the stream.
 func (l *Lexer) NextToken() token.Token {
 	var tok token.Token
 
 	l.skipWhitespace()
 	switch l.ch {
 	case '=':
-		tok = newToken(token.ASSIGN, l.ch)
-	case ';':
-		tok = newToken(token.SEMICOLON, l.ch)
-	case '(':
-		tok = newToken(token.LPAREN, l.ch)
-	case ')':
-		tok = newToken(token.RPAREN, l.ch)
-	case '{':
-		tok = newToken(token.LBRACE, l.ch)
-	case '}':
-		tok = newToken(token.RBRACE, l.ch)
-	case ',':
-		tok = newToken(token.COMMA, l.ch)
+		if l.peekChar() == '=' {
+			l.readChar()
+			tok = token.Make(token.EQ, token.Literal("=="))
+		} else {
+			tok = token.Make(token.ASSIGN, l.ch)
+		}
 	case '+':
-		tok = newToken(token.PLUS, l.ch)
+		tok = token.Make(token.PLUS, l.ch)
+	case '-':
+		tok = token.Make(token.MINUS, l.ch)
+	case '*':
+		tok = token.Make(token.ASTERISK, l.ch)
+	case '/':
+		tok = token.Make(token.SLASH, l.ch)
+	case '!':
+		if l.peekChar() == '=' {
+			l.readChar()
+			tok = token.Make(token.NOT_EQ, token.Literal("!="))
+		} else {
+			tok = token.Make(token.BANG, l.ch)
+		}
+
+	case '<':
+		tok = token.Make(token.LT, l.ch)
+	case '>':
+		tok = token.Make(token.GT, l.ch)
+
+	case ',':
+		tok = token.Make(token.COMMA, l.ch)
+	case ';':
+		tok = token.Make(token.SEMICOLON, l.ch)
+
+	case '(':
+		tok = token.Make(token.LPAREN, l.ch)
+	case ')':
+		tok = token.Make(token.RPAREN, l.ch)
+	case '{':
+		tok = token.Make(token.LBRACE, l.ch)
+	case '}':
+		tok = token.Make(token.RBRACE, l.ch)
+
 	case 0:
-		tok.Type = token.EOF
-		tok.Literal = ""
+		tok = token.Make(token.EOF, token.Literal(""))
+
 	default:
-		if isLetter(l.ch) {
-			tok.Literal = l.readWhile(isLetter)
+		if l.ch.IsLetter() {
+			tok.Literal = l.readWhile(token.Character.IsLetter)
 			tok.Type = token.LookupIdent(tok.Literal)
 			return tok
-		} else if isDigit(l.ch) {
-			tok.Literal = l.readWhile(isDigit)
+		} else if l.ch.IsDigit() {
+			tok.Literal = l.readWhile(token.Character.IsDigit)
 			tok.Type = token.INT
 			return tok
 		} else {
-			tok = newToken(token.ILLEGAL, l.ch)
+			tok = token.Make(token.ILLEGAL, l.ch)
 		}
 	}
 
@@ -57,18 +85,28 @@ func (l *Lexer) NextToken() token.Token {
 	return tok
 }
 
+// readChar reads the next byte in the stream and advances the lexer position.
 func (l *Lexer) readChar() {
 	if l.readPosition >= len(l.input) {
-		l.ch = 0
+		l.ch = token.Character(0)
 	} else {
-		l.ch = l.input[l.readPosition]
+		l.ch = token.Character(l.input[l.readPosition])
 	}
 	l.position = l.readPosition
 	l.readPosition++
 }
 
-// Reads while the predicate is true.
-func (l *Lexer) readWhile(predicate func(byte) bool) string {
+func (l *Lexer) peekChar() byte {
+	if l.readPosition >= len(l.input) {
+		return 0
+	} else {
+		return l.input[l.readPosition]
+	}
+}
+
+// readWhile acts like readChar, but continues reading until the given
+// predicate is false.
+func (l *Lexer) readWhile(predicate func(token.Character) bool) string {
 	position := l.position
 	for predicate(l.ch) {
 		l.readChar()
@@ -76,20 +114,10 @@ func (l *Lexer) readWhile(predicate func(byte) bool) string {
 	return l.input[position:l.position]
 }
 
+// skipWhitespace ignores all the whitespacec starting in the current
+// Lexer position.
 func (l *Lexer) skipWhitespace() {
 	for l.ch == ' ' || l.ch == '\t' || l.ch == '\n' || l.ch == '\r' {
 		l.readChar()
 	}
-}
-
-func newToken(tokenType token.TokenType, ch byte) token.Token {
-	return token.Token{Type: tokenType, Literal: string(ch)}
-}
-
-func isLetter(ch byte) bool {
-	return 'a' <= ch && ch <= 'z' || 'A' <= ch && ch <= 'Z' || ch == '_'
-}
-
-func isDigit(ch byte) bool {
-	return '0' <= ch && ch <= '9'
 }
