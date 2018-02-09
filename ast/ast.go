@@ -2,6 +2,7 @@ package ast
 
 import (
 	"bytes"
+	"strings"
 
 	"github.com/danielrs/monkey/token"
 )
@@ -159,4 +160,73 @@ func (ie *InfixExpression) String() string {
 	out.WriteString(ie.Right.String())
 	out.WriteString(")")
 	return out.String()
+}
+
+type IfExpression struct {
+	Token       token.Token
+	Condition   Expression
+	Consequence *BlockStatement
+	Alternative *BlockStatement
+}
+
+func (ie *IfExpression) expressionNode()      {}
+func (ie *IfExpression) TokenLiteral() string { return ie.Token.Literal }
+func (ie *IfExpression) String() string {
+	var out bytes.Buffer
+	out.WriteString("if")
+	out.WriteString(ie.Condition.String())
+	out.WriteString(" ")
+	out.WriteString(ie.Consequence.String())
+
+	if ie.Alternative != nil {
+		out.WriteString("else ")
+		out.WriteString(ie.Alternative.String())
+	}
+
+	return out.String()
+}
+
+type BlockStatement struct {
+	Token      token.Token
+	Statements []Statement
+}
+
+func (bs *BlockStatement) statementNode()       {}
+func (bs *BlockStatement) TokenLiteral() string { return bs.Token.Literal }
+func (bs *BlockStatement) String() string {
+	var out bytes.Buffer
+	for _, s := range bs.Statements {
+		out.WriteString(s.String())
+	}
+	return out.String()
+}
+
+type FunctionExpression struct {
+	Token      token.Token
+	Parameters ParameterList
+	Body       *BlockStatement
+}
+
+func (fe *FunctionExpression) expressionNode()      {}
+func (fe *FunctionExpression) TokenLiteral() string { return fe.Token.Literal }
+func (fe *FunctionExpression) String() string {
+	var out bytes.Buffer
+
+	out.WriteString(fe.TokenLiteral())
+	out.WriteString("(")
+	out.WriteString(fe.Parameters.String())
+	out.WriteString(") ")
+	out.WriteString(fe.Body.String())
+
+	return out.String()
+}
+
+type ParameterList []*Identifier
+
+func (pl ParameterList) String() string {
+	params := make([]string, 0)
+	for _, p := range pl {
+		params = append(params, p.String())
+	}
+	return strings.Join(params, ", ")
 }

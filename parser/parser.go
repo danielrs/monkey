@@ -60,6 +60,8 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(token.BANG, p.parsePrefixExpression)
 	p.registerPrefix(token.MINUS, p.parsePrefixExpression)
 	p.registerPrefix(token.LPAREN, p.parseGroupedExpression)
+	p.registerPrefix(token.IF, p.parseIfExpression)
+	p.registerPrefix(token.FUNCTION, p.parseFunctionExpression)
 
 	// Register prefix functions.
 	p.infixParseFns = make(map[token.TokenType]InfixParseFn)
@@ -306,6 +308,87 @@ func (p *Parser) parseInfixExpression(left ast.Expression) ast.Expression {
 	expr.Right = p.parseExpression(precedence)
 
 	return expr
+}
+
+func (p *Parser) parseIfExpression() ast.Expression {
+	expr := &ast.IfExpression{Token: p.curToken}
+
+	if !p.expectPeek(token.LPAREN) {
+		return nil
+	}
+
+	p.nextToken()
+	expr.Condition = p.parseExpression(LOWEST)
+
+	if !p.expectPeek(token.RPAREN) {
+		return nil
+	}
+
+	if !p.expectPeek(token.LBRACE) {
+		return nil
+	}
+
+	expr.Consequence = p.parseBlockStatement()
+
+	if p.peekTokenIs(token.ELSE) {
+		p.nextToken()
+		if !p.expectPeek(token.LBRACE) {
+			return nil
+		}
+		expr.Alternative = p.parseBlockStatement()
+	}
+
+	return expr
+}
+
+func (p *Parser) parseBlockStatement() *ast.BlockStatement {
+	block := &ast.BlockStatement{Token: p.curToken}
+	block.Statements = make([]ast.Statement, 0)
+
+	p.nextToken()
+
+	for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
+		stmt := p.parseStatement()
+		if stmt != nil {
+			block.Statements = append(block.Statements, stmt)
+		}
+		p.nextToken()
+	}
+
+	return block
+}
+
+func (p *Parser) parseFunctionExpression() ast.Expression {
+	fn := &ast.FunctionExpression{Token: p.curToken}
+	fn.Parameters = make([]*ast.Identifier, 0)
+
+	if !p.expectPeek(token.LPAREN) {
+		return nil
+	}
+
+	for p.peekTokenIs(token.IDENT) {
+		p.nextToken()
+		ident, ok := p.parseIdentifier().(*ast.Identifier)
+		if !ok {
+			return nil
+		}
+		fn.Parameters = append(fn.Parameters, ident)
+		if p.peekTokenIs(token.COMMA) {
+			p.nextToken()
+		}
+	}
+
+	if !p.expectPeek(token.RPAREN) {
+		return nil
+	}
+
+	if !p.expectPeek(token.LBRACE) {
+		return nil
+	}
+
+	fn.Body = p.parseBlockStatement()
+
+	return fn
 }
 
 func (p *Parser) peekPrecedence() int {

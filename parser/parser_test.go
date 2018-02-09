@@ -379,7 +379,103 @@ func TestOperatorPrecedence(t *testing.T) {
 	}
 }
 
-// Helper functions for parsing.
+func TestIfExpression(t *testing.T) {
+	tests := []struct {
+		input       string
+		condition   string
+		consequence string
+		alternative string
+	}{
+		{"if (x < y) { x }", "(x < y)", "x", ""},
+		{"if (x < y) { x } else { x+y }", "(x < y)", "x", "(x + y)"},
+	}
+
+	for _, tt := range tests {
+		l := lexer.New(tt.input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		if len(program.Statements) != 1 {
+			t.Fatalf("program.Statements does not contain 1 statement, got=%d",
+				len(program.Statements))
+		}
+
+		stmt, ok := program.Statements[0].(*ast.ExpressionStatement)
+		if !ok {
+			castError(t, program.Statements[0], "*ast.ExpressionStatement")
+			t.FailNow()
+		}
+
+		expr, ok := stmt.Expression.(*ast.IfExpression)
+		if !ok {
+			castError(t, stmt.Expression, "*ast.IfExpression")
+			t.FailNow()
+		}
+
+		if expr.Condition.String() != tt.condition {
+			t.Errorf("expr.Condition is %s, want %s",
+				expr.Condition.String(), tt.condition)
+		}
+		if expr.Consequence.String() != tt.consequence {
+			t.Errorf("expr.Consequence is %s, want %s",
+				expr.Consequence.String(), tt.consequence)
+		}
+		if len(tt.alternative) > 0 && expr.Alternative.String() != tt.alternative {
+			t.Errorf("expr.Alternative is %s, want %s",
+				expr.Alternative.String(), tt.alternative)
+		}
+	}
+}
+
+func TestFunctionExpression(t *testing.T) {
+	tests := []struct {
+		input      string
+		parameters string
+		body       string
+	}{
+		{"fn() {}", "", ""},
+		{"fn(a) { a+1 }", "a", "(a + 1)"},
+		{"fn(a,b) {a+b}; ", "a, b", "(a + b)"},
+	}
+
+	for _, tt := range tests {
+		l := lexer.New(tt.input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		if len(program.Statements) != 1 {
+			t.Fatalf("program.Statements does not contain 1 statement, got=%d",
+				len(program.Statements))
+		}
+
+		stmt, ok := program.Statements[0].(*ast.ExpressionStatement)
+		if !ok {
+			castError(t, program.Statements[0], "*ast.ExpressionStatement")
+			t.FailNow()
+		}
+
+		expr, ok := stmt.Expression.(*ast.FunctionExpression)
+		if !ok {
+			castError(t, stmt.Expression, "*ast.FunctionExpression")
+			t.FailNow()
+		}
+
+		if expr.Parameters.String() != tt.parameters {
+			t.Errorf("expr.Parameters.String() is %s, want %s",
+				expr.Parameters.String(), tt.parameters)
+			t.FailNow()
+		}
+		if expr.Body.String() != tt.body {
+			t.Errorf("expr.Body.String() is %s, want %s",
+				expr.Body.String(), tt.body)
+			t.FailNow()
+		}
+	}
+}
+
+// Helper functions for testing.
 
 func testIdentifierExpression(t *testing.T, expr ast.Expression, value string) bool {
 	ident, ok := expr.(*ast.Identifier)
