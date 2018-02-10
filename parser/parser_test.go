@@ -9,37 +9,39 @@ import (
 )
 
 func TestLetStatements(t *testing.T) {
-	input := `
-	let x = 5;
-	let	y = 10;
-	let foobar = 838383;
-	`
-
-	l := lexer.New(input)
-	p := New(l)
-
-	program := p.ParseProgram()
-	checkParserErrors(t, p)
-
-	if len(program.Statements) != 3 {
-		t.Fatalf("program.Statements does not contain 3 statements. got=%d",
-			len(program.Statements))
-	}
-
 	tests := []struct {
-		expectedIdentifier string
+		input      string
+		identifier string
+		value      interface{}
 	}{
-		{"x"},
-		{"y"},
-		{"foobar"},
+		{"let x = 5;", "x", 5},
+		{"let y = true;", "y", true},
+		{"let foobar = y;", "foobar", "y"},
 	}
 
-	for i, tt := range tests {
-		stmt := program.Statements[i]
-		if !testLetStatement(t, stmt, tt.expectedIdentifier) {
-			return
+	for _, tt := range tests {
+		l := lexer.New(tt.input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		if len(program.Statements) != 1 {
+			t.Fatalf("program.Statements does not contain 1 statement, got=%d",
+				len(program.Statements))
+		}
+
+		stmt, ok := program.Statements[0].(*ast.LetStatement)
+		if !ok {
+			castError(t, program.Statements[0], "*ast.LetStatement")
+			t.FailNow()
+		}
+
+		if !testLetStatement(t, stmt, tt.identifier) ||
+			!testLiteralExpression(t, stmt.Value, tt.value) {
+			t.FailNow()
 		}
 	}
+
 }
 
 func testLetStatement(t *testing.T, s ast.Statement, identifier string) bool {
@@ -72,25 +74,36 @@ func testLetStatement(t *testing.T, s ast.Statement, identifier string) bool {
 }
 
 func TestReturnStatements(t *testing.T) {
-	input := `
-	return 5;
-	return 10;
-	return 993322;
-	`
-
-	l := lexer.New(input)
-	p := New(l)
-
-	program := p.ParseProgram()
-	checkParserErrors(t, p)
-
-	if len(program.Statements) != 3 {
-		t.Fatalf("program.Statements does not contain 3 statements. got=%d",
-			len(program.Statements))
+	tests := []struct {
+		input string
+		value interface{}
+	}{
+		{"return 5", 5},
+		{"return false", false},
+		{"return x", "x"},
 	}
 
-	for _, stmt := range program.Statements {
-		testReturnStatement(t, stmt)
+	for _, tt := range tests {
+		l := lexer.New(tt.input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		if len(program.Statements) != 1 {
+			t.Fatalf("program.Statements does not contain 1 statement, got=%d",
+				len(program.Statements))
+		}
+
+		stmt, ok := program.Statements[0].(*ast.ReturnStatement)
+		if !ok {
+			castError(t, program.Statements[0], "*ast.ReturnStatement")
+			t.FailNow()
+		}
+
+		if !testReturnStatement(t, stmt) ||
+			!testLiteralExpression(t, stmt.Value, tt.value) {
+			t.FailNow()
+		}
 	}
 }
 
@@ -428,7 +441,7 @@ func TestIfExpression(t *testing.T) {
 	}
 }
 
-func TestFunctionExpression(t *testing.T) {
+func TestFunctionLiteral(t *testing.T) {
 	tests := []struct {
 		input      string
 		parameters string
@@ -456,9 +469,9 @@ func TestFunctionExpression(t *testing.T) {
 			t.FailNow()
 		}
 
-		expr, ok := stmt.Expression.(*ast.FunctionExpression)
+		expr, ok := stmt.Expression.(*ast.FunctionLiteral)
 		if !ok {
-			castError(t, stmt.Expression, "*ast.FunctionExpression")
+			castError(t, stmt.Expression, "*ast.FunctionLiteral")
 			t.FailNow()
 		}
 
@@ -471,6 +484,62 @@ func TestFunctionExpression(t *testing.T) {
 			t.Errorf("expr.Body.String() is %s, want %s",
 				expr.Body.String(), tt.body)
 			t.FailNow()
+		}
+	}
+}
+
+func TestCallExpression(t *testing.T) {
+	tests := []struct {
+		input     string
+		function  string
+		arguments []string
+	}{
+		{"init()", "init", []string{}},
+		{"add(x, y)", "add", []string{"x", "y"}},
+		{"sub(x+10, y*5)", "sub", []string{"(x + 10)", "(y * 5)"}},
+		{"fn(a) { a * a }(5)", "fn(a) (a * a)", []string{"5"}},
+	}
+
+	for _, tt := range tests {
+		l := lexer.New(tt.input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		if len(program.Statements) != 1 {
+			t.Fatalf("program.Statements does not contain 1 statement, got=%d",
+				len(program.Statements))
+		}
+
+		stmt, ok := program.Statements[0].(*ast.ExpressionStatement)
+		if !ok {
+			castError(t, program.Statements[0], "*ast.ExpressionStatement")
+			t.FailNow()
+		}
+
+		expr, ok := stmt.Expression.(*ast.CallExpression)
+		if !ok {
+			castError(t, stmt.Expression, "*ast.CallExpression")
+			t.FailNow()
+		}
+
+		if expr.Function.String() != tt.function {
+			t.Errorf("expr.Function.String() is %s, want %s",
+				expr.Function.String(), tt.function)
+			t.FailNow()
+		}
+		if len(expr.Arguments) != len(tt.arguments) {
+			t.Errorf("got %d arguments, want %d",
+				len(expr.Arguments), len(tt.arguments))
+			t.FailNow()
+		}
+
+		for i, a := range expr.Arguments {
+			if a.String() != tt.arguments[i] {
+				t.Errorf("Argument #%d is %s, want %s",
+					i, a.String(), tt.arguments[i])
+				t.FailNow()
+			}
 		}
 	}
 }

@@ -30,6 +30,7 @@ var precedences = map[token.TokenType]int{
 	token.GT:       LESSGREATER,
 	token.EQ:       EQUALS,
 	token.NOT_EQ:   EQUALS,
+	token.LPAREN:   CALL,
 }
 
 type (
@@ -61,7 +62,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(token.MINUS, p.parsePrefixExpression)
 	p.registerPrefix(token.LPAREN, p.parseGroupedExpression)
 	p.registerPrefix(token.IF, p.parseIfExpression)
-	p.registerPrefix(token.FUNCTION, p.parseFunctionExpression)
+	p.registerPrefix(token.FUNCTION, p.parseFunctionLiteral)
 
 	// Register prefix functions.
 	p.infixParseFns = make(map[token.TokenType]InfixParseFn)
@@ -73,6 +74,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(token.GT, p.parseInfixExpression)
 	p.registerInfix(token.EQ, p.parseInfixExpression)
 	p.registerInfix(token.NOT_EQ, p.parseInfixExpression)
+	p.registerInfix(token.LPAREN, p.parseCallExpression)
 
 	// Read two tokens so borth {cur,peek}Token are set.
 	p.nextToken()
@@ -128,9 +130,10 @@ func (p *Parser) parseLetStatement() *ast.LetStatement {
 		return nil
 	}
 
-	/// TODO: We're skipping the expressions until we
-	// encounter a semicolon.
-	for !p.curTokenIs(token.SEMICOLON) {
+	p.nextToken()
+	stmt.Value = p.parseExpression(LOWEST)
+
+	if p.peekTokenIs(token.SEMICOLON) {
 		p.nextToken()
 	}
 
@@ -143,12 +146,10 @@ func (p *Parser) parseReturnStatement() *ast.ReturnStatement {
 	}
 
 	stmt := &ast.ReturnStatement{Token: p.curToken}
-
 	p.nextToken()
+	stmt.Value = p.parseExpression(LOWEST)
 
-	// TODO: We're skipping the expressions until we
-	// encounter a semicolon.
-	for !p.curTokenIs(token.SEMICOLON) {
+	if p.peekTokenIs(token.SEMICOLON) {
 		p.nextToken()
 	}
 
@@ -197,23 +198,6 @@ func (p *Parser) expectPeek(t token.TokenType) bool {
 		p.peekError(t)
 		return false
 	}
-}
-
-// Functions for repoting parsing errors.
-
-func (p *Parser) peekError(want token.TokenType) {
-	msg := fmt.Sprintf("expected next token to be %s, got %s",
-		want, p.peekToken.Type)
-	p.errors = append(p.errors, msg)
-}
-
-func (p *Parser) noPrefixParseFnError(t token.TokenType) {
-	msg := fmt.Sprintf("no prefix parse function found for %s", t)
-	p.errors = append(p.errors, msg)
-}
-
-func (p *Parser) errorf(format string, args ...interface{}) {
-	p.errors = append(p.errors, fmt.Sprintf(format, args...))
 }
 
 // Pratt's parsing functions start
@@ -358,8 +342,8 @@ func (p *Parser) parseBlockStatement() *ast.BlockStatement {
 	return block
 }
 
-func (p *Parser) parseFunctionExpression() ast.Expression {
-	fn := &ast.FunctionExpression{Token: p.curToken}
+func (p *Parser) parseFunctionLiteral() ast.Expression {
+	fn := &ast.FunctionLiteral{Token: p.curToken}
 	fn.Parameters = make([]*ast.Identifier, 0)
 
 	if !p.expectPeek(token.LPAREN) {
@@ -391,6 +375,39 @@ func (p *Parser) parseFunctionExpression() ast.Expression {
 	return fn
 }
 
+func (p *Parser) parseCallExpression(function ast.Expression) ast.Expression {
+	expr := &ast.CallExpression{Token: p.curToken, Function: function}
+	expr.Arguments = p.parseCallArguments()
+	return expr
+}
+
+func (p *Parser) parseCallArguments() []ast.Expression {
+	args := make([]ast.Expression, 0)
+
+	// Checks for empty case.
+	if p.peekTokenIs(token.RPAREN) {
+		p.nextToken()
+		return args
+	}
+
+	p.nextToken()
+	args = append(args, p.parseExpression(LOWEST))
+
+	for p.peekTokenIs(token.COMMA) {
+		p.nextToken() // on comma
+		p.nextToken() // on expression
+		args = append(args, p.parseExpression(LOWEST))
+	}
+
+	if !p.expectPeek(token.RPAREN) {
+		return nil
+	}
+
+	return args
+}
+
+// Useful functions.
+
 func (p *Parser) peekPrecedence() int {
 	if p, ok := precedences[p.peekToken.Type]; ok {
 		return p
@@ -403,4 +420,21 @@ func (p *Parser) curPrecedence() int {
 		return p
 	}
 	return LOWEST
+}
+
+// Functions for repoting parsing errors.
+
+func (p *Parser) peekError(want token.TokenType) {
+	msg := fmt.Sprintf("expected next token to be %s, got %s",
+		want, p.peekToken.Type)
+	p.errors = append(p.errors, msg)
+}
+
+func (p *Parser) noPrefixParseFnError(t token.TokenType) {
+	msg := fmt.Sprintf("no prefix parse function found for %s", t)
+	p.errors = append(p.errors, msg)
+}
+
+func (p *Parser) errorf(format string, args ...interface{}) {
+	p.errors = append(p.errors, fmt.Sprintf(format, args...))
 }

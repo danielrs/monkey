@@ -201,15 +201,15 @@ func (bs *BlockStatement) String() string {
 	return out.String()
 }
 
-type FunctionExpression struct {
+type FunctionLiteral struct {
 	Token      token.Token
 	Parameters ParameterList
 	Body       *BlockStatement
 }
 
-func (fe *FunctionExpression) expressionNode()      {}
-func (fe *FunctionExpression) TokenLiteral() string { return fe.Token.Literal }
-func (fe *FunctionExpression) String() string {
+func (fe *FunctionLiteral) expressionNode()      {}
+func (fe *FunctionLiteral) TokenLiteral() string { return fe.Token.Literal }
+func (fe *FunctionLiteral) String() string {
 	var out bytes.Buffer
 
 	out.WriteString(fe.TokenLiteral())
@@ -229,4 +229,28 @@ func (pl ParameterList) String() string {
 		params = append(params, p.String())
 	}
 	return strings.Join(params, ", ")
+}
+
+type CallExpression struct {
+	Token     token.Token // The ''(' token
+	Function  Expression  // identifier or function literal
+	Arguments []Expression
+}
+
+func (ce *CallExpression) expressionNode()      {}
+func (ce *CallExpression) TokenLiteral() string { return ce.Token.Literal }
+func (ce *CallExpression) String() string {
+	var out bytes.Buffer
+
+	args := make([]string, 0)
+	for _, a := range ce.Arguments {
+		args = append(args, a.String())
+	}
+
+	out.WriteString(ce.Function.String())
+	out.WriteString("(")
+	out.WriteString(strings.Join(args, ", "))
+	out.WriteString(")")
+
+	return out.String()
 }
