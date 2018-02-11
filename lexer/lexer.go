@@ -1,6 +1,10 @@
 package lexer
 
-import "github.com/danielrs/monkey/token"
+import (
+	"strings"
+
+	"github.com/danielrs/monkey/token"
+)
 
 type Lexer struct {
 	input        string
@@ -73,7 +77,8 @@ func (l *Lexer) NextToken() token.Token {
 			tok.Type = token.LookupIdent(tok.Literal)
 			return tok
 		} else if l.ch.IsDigit() {
-			tok.Literal = l.readWhile(token.Character.IsDigit)
+			tok.Literal = strings.TrimLeft(
+				l.readWhile(token.Character.IsDigit), "0")
 			tok.Type = token.INT
 			return tok
 		} else {

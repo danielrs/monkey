@@ -89,6 +89,23 @@ func TestBangOperator(t *testing.T) {
 	}
 }
 
+func TestEvalIfExpression(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected interface{}
+	}{
+		{"if (true) { true } else { false }", true},
+		{"if (5 > 10) { 10 } else { 5 }", 5},
+		{"if (5 == 5) { 5 }", 5},
+		{"if (5 == 10) { 5 }", nil},
+	}
+
+	for _, tt := range tests {
+		obj := testEval(tt.input)
+		testObject(t, obj, tt.expected)
+	}
+}
+
 // Helper functions for testing.
 
 func testEval(input string) object.Object {
@@ -131,6 +148,21 @@ func testIntegerObject(t *testing.T, obj object.Object, expected int64) bool {
 		return false
 	}
 	return true
+}
+
+func testObject(t *testing.T, obj object.Object, expected interface{}) bool {
+	switch v := expected.(type) {
+	case nil:
+		return testNilObject(t, obj)
+	case bool:
+		return testBooleanObject(t, obj, v)
+	case int64:
+		return testIntegerObject(t, obj, v)
+	case int:
+		return testIntegerObject(t, obj, int64(v))
+	}
+
+	return false
 }
 
 // Helper functions for errors.

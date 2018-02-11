@@ -1,8 +1,6 @@
 package evaluator
 
 import (
-	"fmt"
-
 	"github.com/danielrs/monkey/ast"
 	"github.com/danielrs/monkey/object"
 )
@@ -22,6 +20,9 @@ func Eval(node ast.Node) object.Object {
 	case *ast.ExpressionStatement:
 		return Eval(node.Expression)
 
+	case *ast.BlockStatement:
+		return evalStatements(node.Statements)
+
 	// Expressions.
 	case *ast.BooleanLiteral:
 		if node.Value {
@@ -40,6 +41,9 @@ func Eval(node ast.Node) object.Object {
 		left := Eval(node.Left)
 		right := Eval(node.Right)
 		return evalInfixExpression(node.Operator, left, right)
+
+	case *ast.IfExpression:
+		return evalIfExpression(node)
 	}
 
 	return nil
@@ -91,7 +95,6 @@ func evalInfixExpression(operator string, left, right object.Object) object.Obje
 	case left.Type() == object.INTEGER_OBJ && right.Type() == object.INTEGER_OBJ:
 		return evalIntegerInfixExpression(operator, left, right)
 	case operator == "==":
-		fmt.Println(left, right)
 		return &object.Boolean{left == right}
 	case operator == "!=":
 		return &object.Boolean{left != right}
@@ -133,6 +136,16 @@ func evalIntegerInfixExpression(operator string, left, right object.Object) obje
 	return NULL
 }
 
+func evalIfExpression(expr *ast.IfExpression) object.Object {
+	predicate := Eval(expr.Condition)
+	if isTruthy(predicate) {
+		return Eval(expr.Consequence)
+	} else if expr.Alternative != nil {
+		return Eval(expr.Alternative)
+	}
+	return NULL
+}
+
 // Helper functions.
 
 func nativeBooleanToObject(b bool) object.Object {
@@ -140,4 +153,17 @@ func nativeBooleanToObject(b bool) object.Object {
 		return TRUE
 	}
 	return FALSE
+}
+
+func isTruthy(obj object.Object) bool {
+	switch obj {
+	case NULL:
+		return false
+	case FALSE:
+		return false
+	case TRUE:
+		return true
+	default:
+		return true
+	}
 }

@@ -143,23 +143,35 @@ func TestIdentifierExpression(t *testing.T) {
 }
 
 func TestIntegerLiteralExpression(t *testing.T) {
-	input := "5;"
-
-	l := lexer.New(input)
-	p := New(l)
-	program := p.ParseProgram()
-	checkParserErrors(t, p)
-
-	if len(program.Statements) != 1 {
-		t.Fatalf("program.Statements does not contain 1 statement, got=%d",
-			len(program.Statements))
+	tests := []struct {
+		input    string
+		expected int64
+	}{
+		{"5;", 5},
+		{"05;", 5},
+		{"005", 5},
+		{"010", 10},
+		{"0010", 10},
 	}
 
-	stmt, ok := program.Statements[0].(*ast.ExpressionStatement)
-	if !ok {
-		castError(t, program.Statements[0], "*ast.ExpressionStatement")
+	for _, tt := range tests {
+		l := lexer.New(tt.input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		if len(program.Statements) != 1 {
+			t.Fatalf("program.Statements does not contain 1 statement, got=%d",
+				len(program.Statements))
+		}
+
+		stmt, ok := program.Statements[0].(*ast.ExpressionStatement)
+		if !ok {
+			castError(t, program.Statements[0], "*ast.ExpressionStatement")
+		}
+
+		testIntegerLiteralExpression(t, stmt.Expression, tt.expected)
 	}
-	testIntegerLiteralExpression(t, stmt.Expression, 5)
 }
 
 func TestBooleanLiteralExpression(t *testing.T) {
@@ -574,7 +586,7 @@ func testIntegerLiteralExpression(t *testing.T, expr ast.Expression, value int64
 		return false
 	}
 	if integer.TokenLiteral() != fmt.Sprintf("%d", value) {
-		t.Errorf("integer.TokenLiteral() is %d, want %d",
+		t.Errorf("integer.TokenLiteral() is %s, want %d",
 			integer.TokenLiteral(), value)
 		return false
 	}
