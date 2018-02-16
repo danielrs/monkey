@@ -106,6 +106,66 @@ func TestEvalIfExpression(t *testing.T) {
 	}
 }
 
+func TestReturnStatement(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected interface{}
+	}{
+		{"return 10;", 10},
+		{"return 10; 9;", 10},
+		{"return 2 * 5; 9;", 10},
+		{"9; return 2 * 5; 9;", 10},
+		{"9; return true; false;", true},
+		{"if (10 > 1) { if (10 > 1) { return 10; } return 1; }", 10},
+	}
+
+	for _, tt := range tests {
+		obj := testEval(tt.input)
+		testObject(t, obj, tt.expected)
+	}
+}
+
+func TestErrorHandling(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{
+			"5 + true",
+			"type mismatch: INTEGER + BOOLEAN",
+		},
+		{
+			"5 + true; 5",
+			"type mismatch: INTEGER + BOOLEAN",
+		},
+		{
+			"-true",
+			"unknown operator: -BOOLEAN",
+		},
+		{
+			"true + false",
+			"unknown operator: BOOLEAN + BOOLEAN",
+		},
+		{
+			"5; true + false; 10;",
+			"unknown operator: BOOLEAN + BOOLEAN",
+		},
+		{
+			"if (10 > 1) { true + false; }",
+			"unknown operator: BOOLEAN + BOOLEAN",
+		},
+		{
+			"if (10 > 1) { if (10 > 1) { true + false; } return 1; }",
+			"unknown operator: BOOLEAN + BOOLEAN",
+		},
+	}
+
+	for _, tt := range tests {
+		obj := testEval(tt.input)
+		testErrorObject(t, obj, tt.expected)
+	}
+}
+
 // Helper functions for testing.
 
 func testEval(input string) object.Object {
@@ -145,6 +205,19 @@ func testIntegerObject(t *testing.T, obj object.Object, expected int64) bool {
 	}
 	if intobj.Value != expected {
 		expectedError(t, "intobj.Value", intobj.Value, expected)
+		return false
+	}
+	return true
+}
+
+func testErrorObject(t *testing.T, obj object.Object, expected string) bool {
+	errobj, ok := obj.(*object.Error)
+	if !ok {
+		castError(t, obj, "*object.Error")
+		return false
+	}
+	if errobj.Message != expected {
+		expectedError(t, "errobj.Message", errobj.Message, expected)
 		return false
 	}
 	return true

@@ -1,6 +1,8 @@
 package evaluator
 
 import (
+	"fmt"
+
 	"github.com/danielrs/monkey/ast"
 	"github.com/danielrs/monkey/object"
 )
@@ -15,13 +17,18 @@ func Eval(node ast.Node) object.Object {
 	switch node := node.(type) {
 	// Statements.
 	case *ast.Program:
-		return evalStatements(node.Statements)
+		return evalProgram(node)
 
 	case *ast.ExpressionStatement:
 		return Eval(node.Expression)
 
 	case *ast.BlockStatement:
-		return evalStatements(node.Statements)
+		return evalBlockStatement(node)
+
+	case *ast.ReturnStatement:
+		return try(Eval(node.Value), func(val object.Object) object.Object {
+			return &object.ReturnValue{val}
+		})
 
 	// Expressions.
 	case *ast.BooleanLiteral:
@@ -34,13 +41,16 @@ func Eval(node ast.Node) object.Object {
 		return &object.Integer{node.Value}
 
 	case *ast.PrefixExpression:
-		right := Eval(node.Right)
-		return evalPrefixExpression(node.Operator, right)
+		return try(Eval(node.Right), func(right object.Object) object.Object {
+			return evalPrefixExpression(node.Operator, right)
+		})
 
 	case *ast.InfixExpression:
-		left := Eval(node.Left)
-		right := Eval(node.Right)
-		return evalInfixExpression(node.Operator, left, right)
+		return try(Eval(node.Left), func(l object.Object) object.Object {
+			return try(Eval(node.Right), func(r object.Object) object.Object {
+				return evalInfixExpression(node.Operator, l, r)
+			})
+		})
 
 	case *ast.IfExpression:
 		return evalIfExpression(node)
@@ -49,10 +59,30 @@ func Eval(node ast.Node) object.Object {
 	return nil
 }
 
-func evalStatements(statements []ast.Statement) object.Object {
+func evalProgram(program *ast.Program) object.Object {
 	var result object.Object
-	for _, s := range statements {
+	for _, s := range program.Statements {
 		result = Eval(s)
+		switch result := result.(type) {
+		case *object.ReturnValue:
+			return result.Value
+		case *object.Error:
+			return result
+		}
+	}
+	return result
+}
+
+func evalBlockStatement(block *ast.BlockStatement) object.Object {
+	var result object.Object
+	for _, s := range block.Statements {
+		result = Eval(s)
+		if result != nil {
+			if result.Type() == object.RETURN_VALUE_OBJ ||
+				result.Type() == object.ERROR_OBJ {
+				return result
+			}
+		}
 	}
 	return result
 }
@@ -64,7 +94,7 @@ func evalPrefixExpression(operator string, right object.Object) object.Object {
 	case "-":
 		return evalMinusOperatorExpression(right)
 	default:
-		return NULL
+		return newError("unknown operator: %s%s", operator, right.Type())
 	}
 }
 
@@ -86,21 +116,28 @@ func evalMinusOperatorExpression(obj object.Object) object.Object {
 	case *object.Integer:
 		return &object.Integer{-number.Value}
 	default:
-		return NULL
+		return newError("unknown operator: -%s", obj.Type())
 	}
 }
 
 func evalInfixExpression(operator string, left, right object.Object) object.Object {
 	switch {
+	case left.Type() != right.Type():
+		return newError("type mismatch: %s %s %s",
+			left.Type(), operator, right.Type())
+
 	case left.Type() == object.INTEGER_OBJ && right.Type() == object.INTEGER_OBJ:
 		return evalIntegerInfixExpression(operator, left, right)
+
 	case operator == "==":
 		return &object.Boolean{left == right}
+
 	case operator == "!=":
 		return &object.Boolean{left != right}
 	}
 
-	return NULL
+	return newError("unknown operator: %s %s %s",
+		left.Type(), operator, right.Type())
 }
 
 func evalIntegerInfixExpression(operator string, left, right object.Object) object.Object {
@@ -137,16 +174,27 @@ func evalIntegerInfixExpression(operator string, left, right object.Object) obje
 }
 
 func evalIfExpression(expr *ast.IfExpression) object.Object {
-	predicate := Eval(expr.Condition)
-	if isTruthy(predicate) {
-		return Eval(expr.Consequence)
-	} else if expr.Alternative != nil {
-		return Eval(expr.Alternative)
-	}
-	return NULL
+	return try(Eval(expr.Condition), func(pred object.Object) object.Object {
+		if isTruthy(pred) {
+			return Eval(expr.Consequence)
+		} else if expr.Alternative != nil {
+			return Eval(expr.Alternative)
+		}
+		return NULL
+	})
 }
 
 // Helper functions.
+
+// Checks the given object, if it's an error, returns it;
+// otherwise, calls the given do function passing obj and
+// returns its value.
+func try(obj object.Object, do func(object.Object) object.Object) object.Object {
+	if isError(obj) {
+		return obj
+	}
+	return do(obj)
+}
 
 func nativeBooleanToObject(b bool) object.Object {
 	if b {
@@ -166,4 +214,15 @@ func isTruthy(obj object.Object) bool {
 	default:
 		return true
 	}
+}
+
+func isError(obj object.Object) bool {
+	if obj != nil {
+		return obj.Type() == object.ERROR_OBJ
+	}
+	return false
+}
+
+func newError(format string, args ...interface{}) *object.Error {
+	return &object.Error{Message: fmt.Sprintf(format, args...)}
 }
