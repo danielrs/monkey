@@ -7,6 +7,7 @@ import (
 
 	"github.com/danielrs/monkey/evaluator"
 	"github.com/danielrs/monkey/lexer"
+	"github.com/danielrs/monkey/object"
 	"github.com/danielrs/monkey/parser"
 )
 
@@ -15,6 +16,7 @@ const PROMPT = ">> "
 // Starts is the REPL loop that goes forever.
 func Start(in io.Reader, out io.Writer) {
 	scanner := bufio.NewScanner(in)
+	env := object.NewEnvironment()
 	for {
 		fmt.Fprintf(out, PROMPT)
 
@@ -32,11 +34,29 @@ func Start(in io.Reader, out io.Writer) {
 			continue
 		}
 
-		evaluated := evaluator.Eval(program)
+		evaluated := evaluator.Eval(env, program)
 		if evaluated != nil {
 			io.WriteString(out, evaluated.Inspect())
 			io.WriteString(out, "\n")
 		}
+	}
+}
+
+func Run(str string, out io.Writer) {
+	env := object.NewEnvironment()
+
+	l := lexer.New(str)
+	p := parser.New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) != 0 {
+		printParserErrors(out, p.Errors())
+		return
+	}
+
+	evaluated := evaluator.Eval(env, program)
+	if evaluated != nil {
+		io.WriteString(out, evaluated.Inspect())
+		io.WriteString(out, "\n")
 	}
 }
 

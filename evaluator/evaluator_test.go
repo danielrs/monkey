@@ -51,6 +51,23 @@ func TestEvalIntegerExpression(t *testing.T) {
 	}
 }
 
+func TestEvalStringExpression(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{`"foo"`, "foo"},
+		{`"foo" + "bar"`, "foobar"},
+		{`"foo" + "bar" + "baz"`, "foobarbaz"},
+		{`"foo" + ("bar" + "baz")`, "foobarbaz"},
+	}
+
+	for _, tt := range tests {
+		obj := testEval(tt.input)
+		testStringObject(t, obj, tt.expected)
+	}
+}
+
 func TestBangOperator(t *testing.T) {
 	tests := []struct {
 		input    string
@@ -125,6 +142,57 @@ func TestReturnStatement(t *testing.T) {
 	}
 }
 
+func TestLetStatement(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected interface{}
+	}{
+		{"let a = 5; a;", 5},
+		{"let a = 5 * 5; a;", 25},
+		{"let a = 5; let b = a; b;", 5},
+		{"let a = 5; let b = 5; let c = a + b + 5; c", 15},
+		{"let a = 5;", nil},
+	}
+
+	for _, tt := range tests {
+		obj := testEval(tt.input)
+		testObject(t, obj, tt.expected)
+	}
+}
+
+func TestFunctionApplication(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected interface{}
+	}{
+		{"let id = fn(x) { x; }; id(5);", 5},
+		{"let id = fn(x) { return x; }; id(5);", 5},
+		{"let double = fn(x) { x * 2 }; double(5);", 10},
+		{"let add = fn(x, y) { x + y }; add(5, 5);", 10},
+		{"let add = fn(x, y) { x + y }; add(5+5, add(5, 5));", 20},
+		{"fn(x){ x; }(5)", 5},
+	}
+
+	for _, tt := range tests {
+		obj := testEval(tt.input)
+		testObject(t, obj, tt.expected)
+	}
+}
+
+func TestClosure(t *testing.T) {
+	input := `
+	let makeAdder = fn(x) {
+		fn(y) { x + y; };
+	}
+
+	let addTwo = makeAdder(2);
+	addTwo(3);
+	`
+
+	obj := testEval(input)
+	testIntegerObject(t, obj, 5)
+}
+
 func TestErrorHandling(t *testing.T) {
 	tests := []struct {
 		input    string
@@ -158,6 +226,18 @@ func TestErrorHandling(t *testing.T) {
 			"if (10 > 1) { if (10 > 1) { true + false; } return 1; }",
 			"unknown operator: BOOLEAN + BOOLEAN",
 		},
+		{
+			"foobar",
+			"identifier not found: foobar",
+		},
+		{
+			"fn(x) { x + y; }(1)",
+			"identifier not found: y",
+		},
+		{
+			`"foo" - "bar"`,
+			"unknown operator: STRING - STRING",
+		},
 	}
 
 	for _, tt := range tests {
@@ -172,7 +252,8 @@ func testEval(input string) object.Object {
 	l := lexer.New(input)
 	p := parser.New(l)
 	program := p.ParseProgram()
-	return Eval(program)
+	env := object.NewEnvironment()
+	return Eval(env, program)
 }
 
 func testNilObject(t *testing.T, obj object.Object) bool {
@@ -210,6 +291,19 @@ func testIntegerObject(t *testing.T, obj object.Object, expected int64) bool {
 	return true
 }
 
+func testStringObject(t *testing.T, obj object.Object, expected string) bool {
+	strobj, ok := obj.(*object.String)
+	if !ok {
+		castError(t, obj, "*object.String")
+		return false
+	}
+	if strobj.Value != expected {
+		expectedError(t, "strobj.Value", strobj.Value, expected)
+		return false
+	}
+	return true
+}
+
 func testErrorObject(t *testing.T, obj object.Object, expected string) bool {
 	errobj, ok := obj.(*object.Error)
 	if !ok {
@@ -233,6 +327,8 @@ func testObject(t *testing.T, obj object.Object, expected interface{}) bool {
 		return testIntegerObject(t, obj, v)
 	case int:
 		return testIntegerObject(t, obj, int64(v))
+	case string:
+		return testStringObject(t, obj, v)
 	}
 
 	return false

@@ -13,21 +13,27 @@ var (
 	FALSE = &object.Boolean{Value: false}
 )
 
-func Eval(node ast.Node) object.Object {
+func Eval(env *object.Environment, node ast.Node) object.Object {
 	switch node := node.(type) {
 	// Statements.
 	case *ast.Program:
-		return evalProgram(node)
+		return evalProgram(env, node)
 
 	case *ast.ExpressionStatement:
-		return Eval(node.Expression)
+		return Eval(env, node.Expression)
 
 	case *ast.BlockStatement:
-		return evalBlockStatement(node)
+		return evalBlockStatement(env, node)
 
 	case *ast.ReturnStatement:
-		return try(Eval(node.Value), func(val object.Object) object.Object {
+		return try(Eval(env, node.Value), func(val object.Object) object.Object {
 			return &object.ReturnValue{val}
+		})
+
+	case *ast.LetStatement:
+		return try(Eval(env, node.Value), func(val object.Object) object.Object {
+			env.Set(node.Identifier.Value, val)
+			return &object.Nil{}
 		})
 
 	// Expressions.
@@ -40,29 +46,49 @@ func Eval(node ast.Node) object.Object {
 	case *ast.IntegerLiteral:
 		return &object.Integer{node.Value}
 
+	case *ast.StringLiteral:
+		return &object.String{node.Value}
+
+	case *ast.Identifier:
+		return evalIdentifier(env, node)
+
+	case *ast.FunctionLiteral:
+		params := node.Parameters
+		body := node.Body
+		return &object.Function{Parameters: params, Body: body, Env: env}
+
 	case *ast.PrefixExpression:
-		return try(Eval(node.Right), func(right object.Object) object.Object {
+		return try(Eval(env, node.Right), func(right object.Object) object.Object {
 			return evalPrefixExpression(node.Operator, right)
 		})
 
 	case *ast.InfixExpression:
-		return try(Eval(node.Left), func(l object.Object) object.Object {
-			return try(Eval(node.Right), func(r object.Object) object.Object {
+		return try(Eval(env, node.Left), func(l object.Object) object.Object {
+			return try(Eval(env, node.Right), func(r object.Object) object.Object {
 				return evalInfixExpression(node.Operator, l, r)
 			})
 		})
 
 	case *ast.IfExpression:
-		return evalIfExpression(node)
+		return evalIfExpression(env, node)
+
+	case *ast.CallExpression:
+		return try(Eval(env, node.Function), func(f object.Object) object.Object {
+			args := evalExpressions(env, node.Arguments)
+			if len(args) >= 1 && isError(args[0]) {
+				return args[0]
+			}
+			return applyFunction(f, args)
+		})
 	}
 
 	return nil
 }
 
-func evalProgram(program *ast.Program) object.Object {
+func evalProgram(env *object.Environment, program *ast.Program) object.Object {
 	var result object.Object
 	for _, s := range program.Statements {
-		result = Eval(s)
+		result = Eval(env, s)
 		switch result := result.(type) {
 		case *object.ReturnValue:
 			return result.Value
@@ -73,10 +99,10 @@ func evalProgram(program *ast.Program) object.Object {
 	return result
 }
 
-func evalBlockStatement(block *ast.BlockStatement) object.Object {
+func evalBlockStatement(env *object.Environment, block *ast.BlockStatement) object.Object {
 	var result object.Object
 	for _, s := range block.Statements {
-		result = Eval(s)
+		result = Eval(env, s)
 		if result != nil {
 			if result.Type() == object.RETURN_VALUE_OBJ ||
 				result.Type() == object.ERROR_OBJ {
@@ -129,6 +155,9 @@ func evalInfixExpression(operator string, left, right object.Object) object.Obje
 	case left.Type() == object.INTEGER_OBJ && right.Type() == object.INTEGER_OBJ:
 		return evalIntegerInfixExpression(operator, left, right)
 
+	case left.Type() == object.STRING_OBJ && right.Type() == object.STRING_OBJ:
+		return evalStringInfixExpression(operator, left, right)
+
 	case operator == "==":
 		return &object.Boolean{left == right}
 
@@ -170,18 +199,87 @@ func evalIntegerInfixExpression(operator string, left, right object.Object) obje
 		return nativeBooleanToObject(l.Value != r.Value)
 	}
 
-	return NULL
+	return newError("unknown operator: %s %s %s",
+		left.Type(), operator, right.Type())
 }
 
-func evalIfExpression(expr *ast.IfExpression) object.Object {
-	return try(Eval(expr.Condition), func(pred object.Object) object.Object {
+func evalStringInfixExpression(operator string, left, right object.Object) object.Object {
+	l, lok := left.(*object.String)
+	r, rok := right.(*object.String)
+
+	if !lok || !rok {
+		return NULL
+	}
+
+	switch operator {
+	// Returns concatenated string.
+	case "+":
+		return &object.String{fmt.Sprintf("%s%s", l.Value, r.Value)}
+	}
+
+	return newError("unknown operator: %s %s %s",
+		left.Type(), operator, right.Type())
+}
+
+func evalIfExpression(env *object.Environment, expr *ast.IfExpression) object.Object {
+	return try(Eval(env, expr.Condition), func(pred object.Object) object.Object {
 		if isTruthy(pred) {
-			return Eval(expr.Consequence)
+			return Eval(env, expr.Consequence)
 		} else if expr.Alternative != nil {
-			return Eval(expr.Alternative)
+			return Eval(env, expr.Alternative)
 		}
 		return NULL
 	})
+}
+
+func evalIdentifier(env *object.Environment, node *ast.Identifier) object.Object {
+	val, ok := env.Get(node.Value)
+	if !ok {
+		return newError("identifier not found: " + node.Value)
+	}
+	return val
+}
+
+func evalExpressions(env *object.Environment, exprs []ast.Expression) []object.Object {
+	var result []object.Object
+
+	for _, e := range exprs {
+		evaluated := Eval(env, e)
+		if isError(evaluated) {
+			return []object.Object{evaluated}
+		}
+		result = append(result, evaluated)
+	}
+
+	return result
+}
+
+func applyFunction(fn object.Object, args []object.Object) object.Object {
+	function, ok := fn.(*object.Function)
+	if !ok {
+		return newError("not a function: %s", fn.Type())
+	}
+
+	// Extends environment.
+	newEnv := object.NewEnclosedEnvironment(function.Env)
+	if len(function.Parameters) != len(args) {
+		return newError("argument mismatch: got %d, want %d",
+			len(args), len(function.Parameters))
+	}
+	for paramIdx, param := range function.Parameters {
+		newEnv.Set(param.Value, args[paramIdx])
+	}
+
+	// Evaluates it.
+	evaluated := Eval(newEnv, function.Body)
+	return unwrapReturnValue(evaluated)
+}
+
+func unwrapReturnValue(obj object.Object) object.Object {
+	if returnValue, ok := obj.(*object.ReturnValue); ok {
+		return returnValue.Value
+	}
+	return obj
 }
 
 // Helper functions.

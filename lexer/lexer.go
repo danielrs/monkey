@@ -77,9 +77,19 @@ func (l *Lexer) NextToken() token.Token {
 			tok.Type = token.LookupIdent(tok.Literal)
 			return tok
 		} else if l.ch.IsDigit() {
-			tok.Literal = strings.TrimLeft(
-				l.readWhile(token.Character.IsDigit), "0")
+			tok.Literal = l.readWhile(token.Character.IsDigit)
+			if len(tok.Literal) > 1 {
+				tok.Literal = strings.TrimLeft(tok.Literal, "0")
+			}
 			tok.Type = token.INT
+			return tok
+		} else if l.ch.IsChar('"') {
+			l.readChar()
+			tok.Literal = l.readUntil(func(c token.Character) bool {
+				return c == '"'
+			})
+			l.readChar()
+			tok.Type = token.STRING
 			return tok
 		} else {
 			tok = token.Make(token.ILLEGAL, l.ch)
@@ -113,10 +123,17 @@ func (l *Lexer) peekChar() byte {
 // predicate is false.
 func (l *Lexer) readWhile(predicate func(token.Character) bool) string {
 	position := l.position
-	for predicate(l.ch) {
+	for l.ch != 0 && predicate(l.ch) {
 		l.readChar()
 	}
 	return l.input[position:l.position]
+}
+
+// readUntil is like readWhile but stops when predicate is true.
+func (l *Lexer) readUntil(predicate func(token.Character) bool) string {
+	return l.readWhile(func(ch token.Character) bool {
+		return !predicate(ch)
+	})
 }
 
 // skipWhitespace ignores all the whitespacec starting in the current

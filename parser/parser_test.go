@@ -16,7 +16,7 @@ func TestLetStatements(t *testing.T) {
 	}{
 		{"let x = 5;", "x", 5},
 		{"let y = true;", "y", true},
-		{"let foobar = y;", "foobar", "y"},
+		{`let foo = "bar";`, "foo", "bar"},
 	}
 
 	for _, tt := range tests {
@@ -80,7 +80,7 @@ func TestReturnStatements(t *testing.T) {
 	}{
 		{"return 5", 5},
 		{"return false", false},
-		{"return x", "x"},
+		{`return "foobar"`, "foobar"},
 	}
 
 	for _, tt := range tests {
@@ -147,6 +147,7 @@ func TestIntegerLiteralExpression(t *testing.T) {
 		input    string
 		expected int64
 	}{
+		{"0", 0},
 		{"5;", 5},
 		{"05;", 5},
 		{"005", 5},
@@ -187,12 +188,36 @@ func TestBooleanLiteralExpression(t *testing.T) {
 		l := lexer.New(tt.input)
 		p := New(l)
 		program := p.ParseProgram()
+		checkParserErrors(t, p)
 
 		stmt, ok := program.Statements[0].(*ast.ExpressionStatement)
 		if !ok {
 			castError(t, program.Statements[0], "*ast.ExpressionStatement")
 		}
 		testBooleanLiteralExpression(t, stmt.Expression, tt.expected)
+	}
+}
+
+func TestStringLiteralExpression(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{`"foobar";`, "foobar"},
+		{`"foo bar";`, "foo bar"},
+	}
+
+	for _, tt := range tests {
+		l := lexer.New(tt.input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		stmt, ok := program.Statements[0].(*ast.ExpressionStatement)
+		if !ok {
+			castError(t, program.Statements[0], "*ast.ExpressionStatement")
+		}
+		testStringLiteralExpression(t, stmt.Expression, tt.expected)
 	}
 }
 
@@ -266,6 +291,7 @@ func TestInfixExpressions(t *testing.T) {
 		{"true == true", true, "==", true},
 		{"true != false", true, "!=", false},
 		{"false == false", false, "==", false},
+		{`"foo" + "bar"`, "foo", "+", "bar"},
 	}
 
 	for _, tt := range tests {
@@ -611,16 +637,33 @@ func testBooleanLiteralExpression(t *testing.T, expr ast.Expression, value bool)
 	return true
 }
 
+func testStringLiteralExpression(t *testing.T, expr ast.Expression, value string) bool {
+	str, ok := expr.(*ast.StringLiteral)
+	if !ok {
+		castError(t, expr, "*ast.StringLiteral")
+		return false
+	}
+	if str.Value != value {
+		t.Errorf("str.Value is %q, want %q", str.Value, value)
+		return false
+	}
+	if str.TokenLiteral() != value {
+		t.Errorf("str.TokenLiteral() is %q, want %q", str.TokenLiteral(), value)
+		return false
+	}
+	return true
+}
+
 func testLiteralExpression(t *testing.T, expr ast.Expression, expected interface{}) bool {
 	switch v := expected.(type) {
 	case int:
 		return testIntegerLiteralExpression(t, expr, int64(v))
 	case int64:
 		return testIntegerLiteralExpression(t, expr, v)
-	case string:
-		return testIdentifierExpression(t, expr, v)
 	case bool:
 		return testBooleanLiteralExpression(t, expr, v)
+	case string:
+		return testStringLiteralExpression(t, expr, v)
 	}
 
 	t.Errorf("type %T of expr not handled, want %T", expr, expected)

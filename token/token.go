@@ -21,6 +21,10 @@ func (c Character) IsDigit() bool {
 	return '0' <= ch && ch <= '9'
 }
 
+func (c Character) IsChar(ch byte) bool {
+	return byte(c) == ch
+}
+
 type Literal string
 
 func (l Literal) String() string {
@@ -37,8 +41,9 @@ const (
 	EOF     = "EOF"
 
 	// Identifiers + litlerals
-	IDENT = "IDENT"
-	INT   = "INT"
+	IDENT  = "IDENT"
+	INT    = "INT"
+	STRING = "STRING"
 
 	// Operators.
 	ASSIGN   = "="
