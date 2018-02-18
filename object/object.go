@@ -3,6 +3,7 @@ package object
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/danielrs/monkey/ast"
 )
@@ -16,6 +17,8 @@ const (
 	STRING_OBJ       = "STRING"
 	RETURN_VALUE_OBJ = "RETURN_VALUE"
 	FUNCTION_OBJ     = "FUNCTION_OBJ"
+	ARRAY_OBJ        = "ARRAY_OBJ"
+	BUILTIN_OBJ      = "BUILTIN"
 	ERROR_OBJ        = "ERROR_OBJ"
 )
 
@@ -108,6 +111,35 @@ func (f *Function) Inspect() string {
 
 	return out.String()
 }
+
+type Array struct {
+	Elements []Object
+}
+
+func (a *Array) Type() ObjectType { return ARRAY_OBJ }
+func (a *Array) Inspect() string {
+	var out bytes.Buffer
+
+	elements := []string{}
+	for _, e := range a.Elements {
+		elements = append(elements, e.Inspect())
+	}
+
+	out.WriteString("[")
+	out.WriteString(strings.Join(elements, ", "))
+	out.WriteString("]")
+
+	return out.String()
+}
+
+type BuiltinFunction func(args ...Object) Object
+
+type Builtin struct {
+	Fn BuiltinFunction
+}
+
+func (b *Builtin) Type() ObjectType { return BUILTIN_OBJ }
+func (b *Builtin) Inspect() string  { return "builtin function" }
 
 type Error struct {
 	Message string

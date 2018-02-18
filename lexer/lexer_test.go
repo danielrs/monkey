@@ -16,7 +16,7 @@ func TestNextToken(t *testing.T) {
 	};
 
 	let result = add(five, ten);
-	!-/*5;
+	!-/*%5;
 	5 < 10 > 5;
 
 	if (5 < 10) {
@@ -29,6 +29,7 @@ func TestNextToken(t *testing.T) {
 	10 != 9;
 	"foobar";
 	"foo bar";
+	[1, 2, 3];
 	`
 
 	tests := []struct {
@@ -75,6 +76,7 @@ func TestNextToken(t *testing.T) {
 		{token.MINUS, "-"},
 		{token.SLASH, "/"},
 		{token.ASTERISK, "*"},
+		{token.MOD, "%"},
 		{token.INT, "5"},
 		{token.SEMICOLON, ";"},
 		{token.INT, "5"},
@@ -111,6 +113,14 @@ func TestNextToken(t *testing.T) {
 		{token.STRING, "foobar"},
 		{token.SEMICOLON, ";"},
 		{token.STRING, "foo bar"},
+		{token.SEMICOLON, ";"},
+		{token.LBRACKET, "["},
+		{token.INT, "1"},
+		{token.COMMA, ","},
+		{token.INT, "2"},
+		{token.COMMA, ","},
+		{token.INT, "3"},
+		{token.RBRACKET, "]"},
 		{token.SEMICOLON, ";"},
 		{token.EOF, ""},
 	}

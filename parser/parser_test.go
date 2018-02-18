@@ -284,6 +284,7 @@ func TestInfixExpressions(t *testing.T) {
 		{"5 - 5", 5, "-", 5},
 		{"5 * 5", 5, "*", 5},
 		{"5 / 5", 5, "/", 5},
+		{"5 % 5", 5, "%", 5},
 		{"5 < 5", 5, "<", 5},
 		{"5 > 5", 5, ">", 5},
 		{"5 == 5", 5, "==", 5},
@@ -415,6 +416,15 @@ func TestOperatorPrecedence(t *testing.T) {
 			"!(true == true)",
 			"(!(true == true))",
 		},
+		// Index.
+		{
+			"a * [1, 2, 3, 4][b * c] * d",
+			"((a * ([1, 2, 3, 4][(b * c)])) * d)",
+		},
+		{
+			"add(a * b[2], b[1], 2 * [1, 2][1])",
+			"add((a * (b[2])), (b[1]), (2 * ([1, 2][1])))",
+		},
 	}
 
 	for _, tt := range tests {
@@ -523,6 +533,77 @@ func TestFunctionLiteral(t *testing.T) {
 				expr.Body.String(), tt.body)
 			t.FailNow()
 		}
+	}
+}
+
+func TestArrayLiteral(t *testing.T) {
+	input := "[1, 2 * 2, 3 + 3]"
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt, ok := program.Statements[0].(*ast.ExpressionStatement)
+	array, ok := stmt.Expression.(*ast.ArrayLiteral)
+	if !ok {
+		castError(t, stmt.Expression, "*ast.ArrayLiteral")
+		t.FailNow()
+	}
+
+	if len(array.Elements) != 3 {
+		t.Fatalf("len(array.Elements) got %d, want %d",
+			len(array.Elements), 3)
+	}
+
+	testIntegerLiteralExpression(t, array.Elements[0], 1)
+	testInfixExpression(t,
+		&ast.ExpressionStatement{Expression: array.Elements[1]}, 2, "*", 2)
+	testInfixExpression(t,
+		&ast.ExpressionStatement{Expression: array.Elements[2]}, 3, "+", 3)
+}
+
+func TestEmptyArrayLiteral(t *testing.T) {
+	input := "[]"
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt, ok := program.Statements[0].(*ast.ExpressionStatement)
+	array, ok := stmt.Expression.(*ast.ArrayLiteral)
+	if !ok {
+		castError(t, stmt.Expression, "*ast.ArrayLiteral")
+		t.FailNow()
+	}
+
+	if len(array.Elements) != 0 {
+		t.Fatalf("len(array.Elements) got %d, want %d",
+			len(array.Elements), 0)
+	}
+}
+
+func TestParsingIndexExpression(t *testing.T) {
+	input := "myArray[1 + 1];"
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt, ok := program.Statements[0].(*ast.ExpressionStatement)
+	expr, ok := stmt.Expression.(*ast.IndexExpression)
+	if !ok {
+		castError(t, stmt.Expression, "*ast.IndexExpression")
+		t.FailNow()
+	}
+
+	if !testIdentifierExpression(t, expr.Left, "myArray") {
+		t.FailNow()
+	}
+	if !testInfixExpression(t, &ast.ExpressionStatement{Expression: expr.Index}, 1, "+", 1) {
+		t.FailNow()
 	}
 }
 

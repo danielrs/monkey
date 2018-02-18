@@ -13,6 +13,143 @@ var (
 	FALSE = &object.Boolean{Value: false}
 )
 
+var builtins = map[string]*object.Builtin{
+	"print": &object.Builtin{
+		Fn: func(args ...object.Object) object.Object {
+			vararg := make([]interface{}, 0, len(args))
+			for _, a := range args {
+				vararg = append(vararg, a.Inspect())
+			}
+			fmt.Println(vararg...)
+			return NULL
+		},
+	},
+
+	"len": &object.Builtin{
+		Fn: func(args ...object.Object) object.Object {
+			if len(args) != 1 {
+				return newError("wrong number of arguments. want %d, got %d",
+					1, len(args))
+			}
+
+			switch obj := args[0].(type) {
+			case *object.String:
+				return &object.Integer{Value: int64(len(obj.Value))}
+			case *object.Array:
+				return &object.Integer{Value: int64(len(obj.Elements))}
+			}
+
+			return newError("argument to `len` not supported, got %s",
+				args[0].Type())
+		},
+	},
+
+	"head": &object.Builtin{
+		Fn: func(args ...object.Object) object.Object {
+			if len(args) != 1 {
+				return newError("wrong number of arguments. want %d, got %d",
+					1, len(args))
+			}
+
+			switch arr := args[0].(type) {
+			case *object.Array:
+				if len(arr.Elements) > 0 {
+					return arr.Elements[0]
+				}
+				return NULL
+			}
+
+			return newError("argument to `head` not supported, got %s",
+				args[0].Type())
+		},
+	},
+
+	"last": &object.Builtin{
+		Fn: func(args ...object.Object) object.Object {
+			if len(args) != 1 {
+				return newError("wrong number of arguments. want %d, got %d",
+					1, len(args))
+			}
+
+			switch arr := args[0].(type) {
+			case *object.Array:
+				if len(arr.Elements) > 0 {
+					return arr.Elements[len(arr.Elements)-1]
+				}
+				return NULL
+			}
+
+			return newError("argument to `last` not supported, got %s",
+				args[0].Type())
+		},
+	},
+
+	"tail": &object.Builtin{
+		Fn: func(args ...object.Object) object.Object {
+			if len(args) != 1 {
+				return newError("wrong number of arguments. want %d, got %d",
+					1, len(args))
+			}
+
+			switch arr := args[0].(type) {
+			case *object.Array:
+				if len(arr.Elements) > 0 {
+					newElems := make([]object.Object, len(arr.Elements)-1)
+					copy(newElems, arr.Elements[1:])
+					return &object.Array{newElems}
+				}
+				return &object.Array{[]object.Object{}}
+			}
+
+			return newError("argument to `tail` not supported, got %s",
+				args[0].Type())
+		},
+	},
+
+	"init": &object.Builtin{
+		Fn: func(args ...object.Object) object.Object {
+			if len(args) != 1 {
+				return newError("wrong number of arguments. want %d, got %d",
+					1, len(args))
+			}
+
+			switch arr := args[0].(type) {
+			case *object.Array:
+				if len(arr.Elements) > 0 {
+					newElems := make([]object.Object, len(arr.Elements)-1)
+					copy(newElems, arr.Elements[:len(arr.Elements)-1])
+					return &object.Array{newElems}
+				}
+				return &object.Array{[]object.Object{}}
+			}
+
+			return newError("argument to `init` not supported, got %s",
+				args[0].Type())
+		},
+	},
+
+	"push": &object.Builtin{
+		Fn: func(args ...object.Object) object.Object {
+			if len(args) != 2 {
+				return newError("wrong number of arguments. want %d, got %d",
+					2, len(args))
+			}
+
+			switch arr := args[0].(type) {
+			case *object.Array:
+				length := len(arr.Elements)
+				newElems := make([]object.Object, length, length+1)
+				copy(newElems, arr.Elements)
+				newElems = append(newElems, args[1])
+				return &object.Array{newElems}
+			}
+
+			return newError("argument to `push` not supported, got %s",
+				args[0].Type())
+		},
+	},
+}
+
 func Eval(env *object.Environment, node ast.Node) object.Object {
 	switch node := node.(type) {
 	// Statements.
@@ -56,6 +193,20 @@ func Eval(env *object.Environment, node ast.Node) object.Object {
 		params := node.Parameters
 		body := node.Body
 		return &object.Function{Parameters: params, Body: body, Env: env}
+
+	case *ast.ArrayLiteral:
+		elems := evalExpressions(env, node.Elements)
+		if len(elems) >= 1 && isError(elems[0]) {
+			return elems[0]
+		}
+		return &object.Array{elems}
+
+	case *ast.IndexExpression:
+		return try(Eval(env, node.Left), func(l object.Object) object.Object {
+			return try(Eval(env, node.Index), func(i object.Object) object.Object {
+				return evalIndexExpression(l, i)
+			})
+		})
 
 	case *ast.PrefixExpression:
 		return try(Eval(env, node.Right), func(right object.Object) object.Object {
@@ -111,6 +262,21 @@ func evalBlockStatement(env *object.Environment, block *ast.BlockStatement) obje
 		}
 	}
 	return result
+}
+
+func evalIndexExpression(left object.Object, index object.Object) object.Object {
+	switch {
+	case left.Type() == object.ARRAY_OBJ && index.Type() == object.INTEGER_OBJ:
+		arr := left.(*object.Array)
+		idx := index.(*object.Integer).Value
+		max := int64(len(arr.Elements) - 1)
+		if idx < 0 || idx > max {
+			return NULL
+		}
+		return arr.Elements[idx]
+	}
+
+	return newError("index operator not supported: %s", left.Type())
 }
 
 func evalPrefixExpression(operator string, right object.Object) object.Object {
@@ -187,6 +353,8 @@ func evalIntegerInfixExpression(operator string, left, right object.Object) obje
 		return &object.Integer{l.Value * r.Value}
 	case "/":
 		return &object.Integer{l.Value / r.Value}
+	case "%":
+		return &object.Integer{l.Value % r.Value}
 
 	// Returns boolean.
 	case "<":
@@ -233,11 +401,15 @@ func evalIfExpression(env *object.Environment, expr *ast.IfExpression) object.Ob
 }
 
 func evalIdentifier(env *object.Environment, node *ast.Identifier) object.Object {
-	val, ok := env.Get(node.Value)
-	if !ok {
-		return newError("identifier not found: " + node.Value)
+	if val, ok := env.Get(node.Value); ok {
+		return val
 	}
-	return val
+
+	if builtin, ok := builtins[node.Value]; ok {
+		return builtin
+	}
+
+	return newError("identifier not found: " + node.Value)
 }
 
 func evalExpressions(env *object.Environment, exprs []ast.Expression) []object.Object {
@@ -255,24 +427,26 @@ func evalExpressions(env *object.Environment, exprs []ast.Expression) []object.O
 }
 
 func applyFunction(fn object.Object, args []object.Object) object.Object {
-	function, ok := fn.(*object.Function)
-	if !ok {
-		return newError("not a function: %s", fn.Type())
+	switch fn := fn.(type) {
+	case *object.Function:
+		// Extends environment.
+		newEnv := object.NewEnclosedEnvironment(fn.Env)
+		if len(fn.Parameters) != len(args) {
+			return newError("argument mismatch: got %d, want %d",
+				len(args), len(fn.Parameters))
+		}
+		for paramIdx, param := range fn.Parameters {
+			newEnv.Set(param.Value, args[paramIdx])
+		}
+		// Evaluates it.
+		evaluated := Eval(newEnv, fn.Body)
+		return unwrapReturnValue(evaluated)
+
+	case *object.Builtin:
+		return fn.Fn(args...)
 	}
 
-	// Extends environment.
-	newEnv := object.NewEnclosedEnvironment(function.Env)
-	if len(function.Parameters) != len(args) {
-		return newError("argument mismatch: got %d, want %d",
-			len(args), len(function.Parameters))
-	}
-	for paramIdx, param := range function.Parameters {
-		newEnv.Set(param.Value, args[paramIdx])
-	}
-
-	// Evaluates it.
-	evaluated := Eval(newEnv, function.Body)
-	return unwrapReturnValue(evaluated)
+	return newError("not a function: %s", fn.Type())
 }
 
 func unwrapReturnValue(obj object.Object) object.Object {

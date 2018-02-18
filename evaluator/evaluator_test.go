@@ -39,6 +39,9 @@ func TestEvalIntegerExpression(t *testing.T) {
 		{"5*10", 50},
 		{"5/10", 0},
 		{"10/5", 2},
+		{"5%10", 5},
+		{"10%10", 0},
+		{"3%2", 1},
 		{"2*5 + 20*1", 30},
 		{"-50 + 30 - 10 + 30", 0},
 		{"3 * (3 * 3) + 10", 37},
@@ -193,6 +196,84 @@ func TestClosure(t *testing.T) {
 	testIntegerObject(t, obj, 5)
 }
 
+func TestArrayLiteral(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected []interface{}
+	}{
+		{"[1, 2, 3]", []interface{}{1, 2, 3}},
+		{"[]", []interface{}{}},
+		{"[true, false]", []interface{}{true, false}},
+		{`["foo", "bar", "baz"]`, []interface{}{"foo", "bar", "baz"}},
+	}
+
+	for _, tt := range tests {
+		obj := testEval(tt.input)
+		testArrayObject(t, obj, tt.expected)
+	}
+}
+
+func TestArrayIndexExpression(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected interface{}
+	}{
+		{"[1, 2, 3][0]", 1},
+		{"[1, 2, 3][1]", 2},
+		{"[1, 2, 3][2]", 3},
+		{"let i = 0; [1][i];", 1},
+		{"[1, 2, 3][1 + 1]", 3},
+		{"let arr = [1, 2, 3]; arr[0]", 1},
+		{"let arr = [1, 2, 3]; arr[1]", 2},
+		{"let arr = [1, 2, 3]; arr[2]", 3},
+		{"let i = 1; let arr = [1, 2, 3]; arr[0]; arr[i];", 2},
+		{"[1, 2, 3][3]", nil},
+		{"[1, 2, 3][-1]", nil},
+	}
+
+	for _, tt := range tests {
+		obj := testEval(tt.input)
+		testObject(t, obj, tt.expected)
+	}
+}
+
+func TestBuiltinFunction(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected interface{}
+	}{
+		{`len("")`, 0},
+		{`len("four")`, 4},
+		{`len("hello world")`, 11},
+		// Arrays.
+		{`len([1, 2, 3])`, 3},
+		{`len([1, 2])`, 2},
+		{`len([1])`, 1},
+		{`len([])`, 0},
+		{`head([1, 2])`, 1},
+		{`head([2])`, 2},
+		{`head([])`, nil},
+		{`last([1, 2])`, 2},
+		{`last([1])`, 1},
+		{`last([])`, nil},
+		{`tail([1, 2, 3])`, []interface{}{2, 3}},
+		{`tail([2, 3])`, []interface{}{3}},
+		{`tail([3])`, []interface{}{}},
+		{`tail([])`, []interface{}{}},
+		{`init([1, 2, 3])`, []interface{}{1, 2}},
+		{`init([2, 3])`, []interface{}{2}},
+		{`init([3])`, []interface{}{}},
+		{`init([])`, []interface{}{}},
+		{`push([], 1)`, []interface{}{1}},
+		{`push([1], 2)`, []interface{}{1, 2}},
+	}
+
+	for _, tt := range tests {
+		obj := testEval(tt.input)
+		testObject(t, obj, tt.expected)
+	}
+}
+
 func TestErrorHandling(t *testing.T) {
 	tests := []struct {
 		input    string
@@ -237,6 +318,15 @@ func TestErrorHandling(t *testing.T) {
 		{
 			`"foo" - "bar"`,
 			"unknown operator: STRING - STRING",
+		},
+		// Builtin.
+		{
+			`len(1)`,
+			"argument to `len` not supported, got INTEGER",
+		},
+		{
+			`len("one", "two")`,
+			"wrong number of arguments. want 1, got 2",
 		},
 	}
 
@@ -304,6 +394,25 @@ func testStringObject(t *testing.T, obj object.Object, expected string) bool {
 	return true
 }
 
+func testArrayObject(t *testing.T, obj object.Object, expected []interface{}) bool {
+	arr, ok := obj.(*object.Array)
+	if !ok {
+		castError(t, obj, "*object.Array")
+		return false
+	}
+	if len(arr.Elements) != len(expected) {
+		t.Errorf("len(arr.Elements) got %d, want %d",
+			len(arr.Elements), len(expected))
+		return false
+	}
+	for i := range arr.Elements {
+		if !testObject(t, arr.Elements[i], expected[i]) {
+			return false
+		}
+	}
+	return true
+}
+
 func testErrorObject(t *testing.T, obj object.Object, expected string) bool {
 	errobj, ok := obj.(*object.Error)
 	if !ok {
@@ -329,8 +438,11 @@ func testObject(t *testing.T, obj object.Object, expected interface{}) bool {
 		return testIntegerObject(t, obj, int64(v))
 	case string:
 		return testStringObject(t, obj, v)
+	case []interface{}:
+		return testArrayObject(t, obj, v)
 	}
 
+	t.Errorf("Object %T not handled", obj)
 	return false
 }
 

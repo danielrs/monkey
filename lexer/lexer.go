@@ -41,6 +41,8 @@ func (l *Lexer) NextToken() token.Token {
 		tok = token.Make(token.ASTERISK, l.ch)
 	case '/':
 		tok = token.Make(token.SLASH, l.ch)
+	case '%':
+		tok = token.Make(token.MOD, l.ch)
 	case '!':
 		if l.peekChar() == '=' {
 			l.readChar()
@@ -67,6 +69,10 @@ func (l *Lexer) NextToken() token.Token {
 		tok = token.Make(token.LBRACE, l.ch)
 	case '}':
 		tok = token.Make(token.RBRACE, l.ch)
+	case '[':
+		tok = token.Make(token.LBRACKET, l.ch)
+	case ']':
+		tok = token.Make(token.RBRACKET, l.ch)
 
 	case 0:
 		tok = token.Make(token.EOF, token.Literal(""))
