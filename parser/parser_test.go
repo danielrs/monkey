@@ -607,6 +607,141 @@ func TestParsingIndexExpression(t *testing.T) {
 	}
 }
 
+func TestHashLiteralExpression(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected map[interface{}]interface{}
+	}{
+		{`{"one": 1}`, map[interface{}]interface{}{"one": 1}},
+		{`{1: "one"}`, map[interface{}]interface{}{int64(1): "one"}},
+		{`{"true": true}`, map[interface{}]interface{}{"true": true}},
+		{`{false: "false"}`, map[interface{}]interface{}{false: "false"}},
+	}
+
+	for _, tt := range tests {
+		l := lexer.New(tt.input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		stmt, ok := program.Statements[0].(*ast.ExpressionStatement)
+		hash, ok := stmt.Expression.(*ast.HashLiteral)
+		if !ok {
+			castError(t, stmt.Expression, "*ast.HashLiteral")
+			continue
+		}
+		if len(hash.Pairs) != len(tt.expected) {
+			t.Errorf("len(hash.Pairs) got %d, want %d",
+				len(hash.Pairs), len(tt.expected))
+			continue
+		}
+
+		for key, v := range hash.Pairs {
+			k := unwrapLiteral(key)
+
+			expectedv, ok := tt.expected[k]
+			if !ok {
+				t.Errorf("Key %v not present in %v", k, tt.expected)
+				break
+			}
+			testLiteralExpression(t, v, expectedv)
+		}
+	}
+}
+
+func TestEmptyHashLiteralExpression(t *testing.T) {
+	input := "{}"
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	stmt, ok := program.Statements[0].(*ast.ExpressionStatement)
+	hash, ok := stmt.Expression.(*ast.HashLiteral)
+	if !ok {
+		castError(t, stmt.Expression, "*ast.HashLiteral")
+		t.FailNow()
+	}
+	if len(hash.Pairs) != 0 {
+		t.Error("len(hash.Pairs) got %d, want %d",
+			len(hash.Pairs), 0)
+	}
+}
+
+func TestHashLiteralWithExpressions(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected map[interface{}]func(ast.Expression)
+	}{
+		{
+			`{"one": 0 + 1}`,
+			map[interface{}]func(ast.Expression){
+				"one": func(e ast.Expression) {
+					testInfixExpression(t,
+						&ast.ExpressionStatement{Expression: e}, 0, "+", 1)
+				},
+			},
+		},
+		{
+			`{"two": 20 / 10, 2: "d" + "os"}`,
+			map[interface{}]func(ast.Expression){
+				"two": func(e ast.Expression) {
+					testInfixExpression(t,
+						&ast.ExpressionStatement{Expression: e}, 20, "/", 10)
+				},
+				int64(2): func(e ast.Expression) {
+					testInfixExpression(t,
+						&ast.ExpressionStatement{Expression: e}, "d", "+", "os")
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		l := lexer.New(tt.input)
+		p := New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		stmt, ok := program.Statements[0].(*ast.ExpressionStatement)
+		hash, ok := stmt.Expression.(*ast.HashLiteral)
+		if !ok {
+			castError(t, stmt.Expression, "*ast.HashLiteral")
+			continue
+		}
+		if len(hash.Pairs) != len(tt.expected) {
+			t.Error("len(hash.Pairs) got %d, want %d",
+				len(hash.Pairs), len(tt.expected))
+			continue
+		}
+
+		for key, v := range hash.Pairs {
+			k := unwrapLiteral(key)
+
+			testFunc, ok := tt.expected[k]
+			if !ok {
+				t.Errorf("testFunc %v not present in %v", k, tt.expected)
+				break
+			}
+
+			testFunc(v)
+		}
+	}
+}
+
+func unwrapLiteral(literal ast.Expression) interface{} {
+	switch l := literal.(type) {
+	case *ast.BooleanLiteral:
+		return l.Value
+	case *ast.IntegerLiteral:
+		return l.Value
+	case *ast.StringLiteral:
+		return l.Value
+	}
+	panic("unwraping literal")
+}
+
 func TestCallExpression(t *testing.T) {
 	tests := []struct {
 		input     string

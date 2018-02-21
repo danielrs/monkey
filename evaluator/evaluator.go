@@ -208,6 +208,9 @@ func Eval(env *object.Environment, node ast.Node) object.Object {
 			})
 		})
 
+	case *ast.HashLiteral:
+		return evalHashLiteral(env, node)
+
 	case *ast.PrefixExpression:
 		return try(Eval(env, node.Right), func(right object.Object) object.Object {
 			return evalPrefixExpression(node.Operator, right)
@@ -274,9 +277,45 @@ func evalIndexExpression(left object.Object, index object.Object) object.Object 
 			return NULL
 		}
 		return arr.Elements[idx]
+	case left.Type() == object.HASH_OBJ:
+		hash := left.(*object.Hash)
+		key, ok := index.(object.Hasher)
+		if !ok {
+			return newError("unusable as hash key: %s", index.Type())
+		}
+		pair, ok := hash.Pairs[key.HashKey()]
+		if !ok {
+			return NULL
+		}
+		return pair.Value
 	}
 
 	return newError("index operator not supported: %s", left.Type())
+}
+
+func evalHashLiteral(env *object.Environment, node *ast.HashLiteral) object.Object {
+	pairs := make(map[object.HashKey]object.HashPair, len(node.Pairs))
+	for keyNode, valueNode := range node.Pairs {
+		key := Eval(env, keyNode)
+		if isError(key) {
+			return key
+		}
+
+		hasher, ok := key.(object.Hasher)
+		if !ok {
+			return newError("unusable as hash key: %s", key.Type())
+		}
+
+		value := Eval(env, valueNode)
+		if isError(value) {
+			return value
+		}
+
+		hashed := hasher.HashKey()
+		pairs[hashed] = object.HashPair{Key: key, Value: value}
+	}
+
+	return &object.Hash{Pairs: pairs}
 }
 
 func evalPrefixExpression(operator string, right object.Object) object.Object {

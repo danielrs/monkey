@@ -237,6 +237,70 @@ func TestArrayIndexExpression(t *testing.T) {
 	}
 }
 
+func TestHashLiteralExpression(t *testing.T) {
+	input := `
+	let two = "two";
+	{
+		"one": 10 - 9,
+		two: 1 + 1,
+		"thr" + "ee": 6 / 2,
+		4: 4,
+		true: 5,
+		false: 6
+	}`
+
+	expected := map[object.HashKey]interface{}{
+		(&object.String{Value: "one"}).HashKey():   1,
+		(&object.String{Value: "two"}).HashKey():   2,
+		(&object.String{Value: "three"}).HashKey(): 3,
+		(&object.Integer{Value: 4}).HashKey():      4,
+		TRUE.HashKey():                             5,
+		FALSE.HashKey():                            6,
+	}
+
+	obj := testEval(input)
+	hash, ok := obj.(*object.Hash)
+	if !ok {
+		castError(t, obj, "*object.Hash")
+		t.FailNow()
+	}
+
+	if len(hash.Pairs) != len(expected) {
+		t.Errorf("len(hash.Pairs) got %d, want %d",
+			len(hash.Pairs), len(expected))
+		t.FailNow()
+	}
+
+	for expectedKey, expectedValue := range expected {
+		pair, ok := hash.Pairs[expectedKey]
+		if !ok {
+			t.Errorf("no pair for given key in map")
+			break
+		}
+		testObject(t, pair.Value, expectedValue)
+	}
+}
+
+func TestHashIndexExpression(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected interface{}
+	}{
+		{`{"foo": 1}["foo"]`, 1},
+		{`{"foo": 1}["bar"]`, nil},
+		{`let key = "foo"; {"foo": "bar"}[key]`, "bar"},
+		{`{}["foo"]`, nil},
+		{`{5: 5}[5]`, 5},
+		{`{true: true}[true]`, true},
+		{`{false: false}[false]`, false},
+	}
+
+	for _, tt := range tests {
+		obj := testEval(tt.input)
+		testObject(t, obj, tt.expected)
+	}
+}
+
 func TestBuiltinFunction(t *testing.T) {
 	tests := []struct {
 		input    string
@@ -318,6 +382,11 @@ func TestErrorHandling(t *testing.T) {
 		{
 			`"foo" - "bar"`,
 			"unknown operator: STRING - STRING",
+		},
+		// Arrays and Hashes.
+		{
+			`{"foo": "bar"}[fn(x) { x }]`,
+			"unusable as hash key: FUNCTION_OBJ",
 		},
 		// Builtin.
 		{
