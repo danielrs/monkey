@@ -293,6 +293,8 @@ func TestInfixExpressions(t *testing.T) {
 		{"true != false", true, "!=", false},
 		{"false == false", false, "==", false},
 		{`"foo" + "bar"`, "foo", "+", "bar"},
+		{`true && "foo"`, true, "&&", "foo"},
+		{`false || 10`, false, "||", 10},
 	}
 
 	for _, tt := range tests {
@@ -415,6 +417,27 @@ func TestOperatorPrecedence(t *testing.T) {
 		{
 			"!(true == true)",
 			"(!(true == true))",
+		},
+		// Logical.
+		{
+			"true && false",
+			"(true && false)",
+		},
+		{
+			"true && false || true",
+			"((true && false) || true)",
+		},
+		{
+			"true && true == false || false",
+			"((true && (true == false)) || false)",
+		},
+		{
+			"false || false == true && true",
+			"(false || ((false == true) && true))",
+		},
+		{
+			"i % 5 == 0 && !true",
+			"(((i % 5) == 0) && (!true))",
 		},
 		// Index.
 		{

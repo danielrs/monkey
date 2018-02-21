@@ -60,6 +60,10 @@ const (
 	EQ     = "=="
 	NOT_EQ = "!="
 
+	// Logical operators.
+	AND = "&&"
+	OR  = "||"
+
 	// Delimiters.
 	COMMA     = ","
 	SEMICOLON = ";"

@@ -56,6 +56,17 @@ func (l *Lexer) NextToken() token.Token {
 	case '>':
 		tok = token.Make(token.GT, l.ch)
 
+	case '&':
+		if l.peekChar() == '&' {
+			l.readChar()
+			tok = token.Make(token.AND, token.Literal("&&"))
+		}
+	case '|':
+		if l.peekChar() == '|' {
+			l.readChar()
+			tok = token.Make(token.OR, token.Literal("||"))
+		}
+
 	case ',':
 		tok = token.Make(token.COMMA, l.ch)
 	case ';':

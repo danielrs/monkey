@@ -217,6 +217,12 @@ func Eval(env *object.Environment, node ast.Node) object.Object {
 		})
 
 	case *ast.InfixExpression:
+		// Checks for logical expression first.
+		if node.Operator == "&&" || node.Operator == "||" {
+			return evalLazyInfixExpression(env, node)
+		}
+
+		// Otherwise does normal infix expression.
 		return try(Eval(env, node.Left), func(l object.Object) object.Object {
 			return try(Eval(env, node.Right), func(r object.Object) object.Object {
 				return evalInfixExpression(node.Operator, l, r)
@@ -351,6 +357,18 @@ func evalMinusOperatorExpression(obj object.Object) object.Object {
 	}
 }
 
+func evalLazyInfixExpression(env *object.Environment, node *ast.InfixExpression) object.Object {
+
+	switch node.Operator {
+	case "&&":
+		return and(env, node.Left, node.Right)
+	case "||":
+		return or(env, node.Left, node.Right)
+	}
+
+	return NULL
+}
+
 func evalInfixExpression(operator string, left, right object.Object) object.Object {
 	switch {
 	case left.Type() != right.Type():
@@ -365,7 +383,6 @@ func evalInfixExpression(operator string, left, right object.Object) object.Obje
 
 	case operator == "==":
 		return &object.Boolean{left == right}
-
 	case operator == "!=":
 		return &object.Boolean{left != right}
 	}
@@ -505,6 +522,24 @@ func try(obj object.Object, do func(object.Object) object.Object) object.Object 
 		return obj
 	}
 	return do(obj)
+}
+
+func and(env *object.Environment, lhs, rhs ast.Expression) object.Object {
+	return try(Eval(env, lhs), func(left object.Object) object.Object {
+		if isTruthy(left) {
+			return Eval(env, rhs)
+		}
+		return left
+	})
+}
+
+func or(env *object.Environment, lhs, rhs ast.Expression) object.Object {
+	return try(Eval(env, lhs), func(left object.Object) object.Object {
+		if isTruthy(left) {
+			return left
+		}
+		return Eval(env, rhs)
+	})
 }
 
 func nativeBooleanToObject(b bool) object.Object {

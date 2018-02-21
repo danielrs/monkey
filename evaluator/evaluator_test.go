@@ -23,11 +23,12 @@ func TestEvalBooleanExpression(t *testing.T) {
 	}
 }
 
-func TestEvalIntegerExpression(t *testing.T) {
+func TestEvalInfixExpression(t *testing.T) {
 	tests := []struct {
 		input    string
-		expected int64
+		expected interface{}
 	}{
+		// Integers.
 		{"5", 5},
 		{"10", 10},
 		{"-5", -5},
@@ -46,32 +47,34 @@ func TestEvalIntegerExpression(t *testing.T) {
 		{"-50 + 30 - 10 + 30", 0},
 		{"3 * (3 * 3) + 10", 37},
 		{"7 * 5 + 10 / 2 + 1000/500", 42},
-	}
-
-	for _, tt := range tests {
-		obj := testEval(tt.input)
-		testIntegerObject(t, obj, tt.expected)
-	}
-}
-
-func TestEvalStringExpression(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
+		// Strings.
 		{`"foo"`, "foo"},
 		{`"foo" + "bar"`, "foobar"},
 		{`"foo" + "bar" + "baz"`, "foobarbaz"},
 		{`"foo" + ("bar" + "baz")`, "foobarbaz"},
+		// Logical.
+		{"false && false", false},
+		{"false && true", false},
+		{"true && false", false},
+		{"true && true", true},
+		{"false || false", false},
+		{"false || true", true},
+		{"true || false", true},
+		{"true || true", true},
+		{"true && 5", 5},
+		{"false && 5", false},
+		{"false || 5", 5},
+		{"true || 5", true},
+		{`(false || false || false || true) && (true && true && "foo")`, "foo"},
 	}
 
 	for _, tt := range tests {
 		obj := testEval(tt.input)
-		testStringObject(t, obj, tt.expected)
+		testObject(t, obj, tt.expected)
 	}
 }
 
-func TestBangOperator(t *testing.T) {
+func TestBooleanExpression(t *testing.T) {
 	tests := []struct {
 		input    string
 		expected bool
