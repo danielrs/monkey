@@ -4,8 +4,8 @@ Implementation of the Monkey Programming Language specified in [Writing An Inter
 
 ### Notable features
 
-* Dynamically typed
 * Functional
+* Dynamically typed
 * Immutable data
 * Almost everything is an expression
 * First-class and higher-order functions
