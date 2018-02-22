@@ -15,7 +15,7 @@ Check examples folder for usage.
 
 ### Todo (not in official specification)
 
-- [ ] Comments
+- [x] Comments
 - [x] Modulus operator
 - [x] Add logical operators AND (&&) and OR (||)
 - [ ] Manipulation functions for lists and hashes

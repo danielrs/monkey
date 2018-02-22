@@ -84,6 +84,9 @@ const (
 	IF       = "IF"
 	ELSE     = "ELSE"
 	RETURN   = "RETURN"
+
+	// Comment
+	COMMENT = "//"
 )
 
 // A token can be create using the make function (not new since the returned

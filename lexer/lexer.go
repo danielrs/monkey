@@ -40,7 +40,16 @@ func (l *Lexer) NextToken() token.Token {
 	case '*':
 		tok = token.Make(token.ASTERISK, l.ch)
 	case '/':
-		tok = token.Make(token.SLASH, l.ch)
+		if l.peekChar() == '/' {
+			l.readChar()
+			l.readChar()
+			tok.Literal = l.readUntil(func(c token.Character) bool {
+				return c == '\n'
+			})
+			tok.Type = token.COMMENT
+		} else {
+			tok = token.Make(token.SLASH, l.ch)
+		}
 	case '%':
 		tok = token.Make(token.MOD, l.ch)
 	case '!':

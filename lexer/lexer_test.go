@@ -34,6 +34,7 @@ func TestNextToken(t *testing.T) {
 	true && false;
 	5 && 10;
 	"foo" && "bar";
+	// This is a comment
 	`
 
 	tests := []struct {
@@ -156,6 +157,7 @@ func TestNextToken(t *testing.T) {
 		{token.AND, "&&"},
 		{token.STRING, "bar"},
 		{token.SEMICOLON, ";"},
+		{token.COMMENT, " This is a comment"},
 		{token.EOF, ""},
 	}
 

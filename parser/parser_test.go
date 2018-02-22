@@ -821,6 +821,35 @@ func TestCallExpression(t *testing.T) {
 	}
 }
 
+func TestComment(t *testing.T) {
+	input := `
+	// First comment.
+	let first = 1;
+	// Second comment.
+	// With some more information.
+	let second = 2;
+	// Third comment.
+	let third = 3; // with some inline.
+	`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	if len(program.Statements) != 3 {
+		t.Errorf("len(program.Statements) got %d, want %d",
+			len(program.Statements), 3)
+	}
+
+	for _, s := range program.Statements {
+		_, ok := s.(*ast.LetStatement)
+		if !ok {
+			castError(t, s, "*ast.LetStatement")
+		}
+	}
+}
+
 // Helper functions for testing.
 
 func testIdentifierExpression(t *testing.T, expr ast.Expression, value string) bool {
